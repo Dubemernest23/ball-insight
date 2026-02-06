@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <%- include('partials/header') %>
+    
+    <main class="container">
+        <section class="about-section">
+            <h1>About Ball-insight</h1>
+            
+            <div class="about-content">
+                <h2>🎯 Our Mission</h2>
+                <p>
+                    We provide data-driven insights to help sports bettors make informed decisions. 
+                    Our platform analyzes historical football match data to identify patterns and trends 
+                    that can give you an edge.
+                </p>
+
+                <h2>📊 What We Analyze</h2>
+                <ul>
+                    <li><strong>Goal Timing Patterns:</strong> When do teams typically score? We break down goals by 15-minute intervals.</li>
+                    <li><strong>First to Score:</strong> Historical data showing which teams score first most often.</li>
+                    <li><strong>Both Teams to Score (BTTS):</strong> Frequency analysis for BTTS markets.</li>
+                    <li><strong>Over/Under Trends:</strong> Patterns in total goals scored across matches.</li>
+                    <li><strong>Home vs Away Performance:</strong> How teams perform based on venue.</li>
+                </ul>
+
+                <h2>⚙️ How It Works</h2>
+                <p>
+                    We use the API-Football service to fetch real match data including fixtures, results, 
+                    and detailed match events with precise timing. This data is analyzed to produce 
+                    actionable insights for the last 5-10 games of any team.
+                </p>
+
+                <h2>⚠️ Responsible Gambling</h2>
+                <p class="warning">
+                    This tool is for informational and educational purposes only. We do not guarantee 
+                    any betting outcomes. Always gamble responsibly and never bet more than you can 
+                    afford to lose. If you have a gambling problem, please seek help.
+                </p>
+
+                <h2>🔧 Technology</h2>
+                <p>
+                    Built with Node.js, Express, MySQL, and EJS. Data powered by API-Football.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <%- include('partials/footer') %>
+
+    <style>
+        .about-section {
+            background: white;
+            padding: 3rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 2rem 0;
+        }
+        
+        .about-section h1 {
+            color: #2c3e50;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .about-content h2 {
+            color: #3498db;
+            margin: 2rem 0 1rem;
+        }
+        
+        .about-content p {
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        
+        .about-content ul {
+            margin-left: 2rem;
+            line-height: 2;
+        }
+        
+        .about-content ul li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #e74c3c;
+            padding: 1rem;
+            border-radius: 5px;
+            color: #856404;
+        }
+    </style>
+</body>
+</html>

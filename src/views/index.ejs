@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <%- include('partials/header') %>
+    
+    <main class="container">
+        <section class="hero">
+            <h1>Ball-insight</h1>
+            <p class="tagline">Data-driven insights for smarter betting decisions</p>
+        </section>
+
+        <section class="features">
+            <div class="feature-card">
+                <h3>⏱️ Goal Timing Analysis</h3>
+                <p>Track when teams score across different match intervals</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>🎯 First to Score</h3>
+                <p>Historical data on which team typically scores first</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>⚽ Both Teams Score</h3>
+                <p>Analyze BTTS frequency for better predictions</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>📊 Over/Under Patterns</h3>
+                <p>Identify trends in total goals scored</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>🏟️ Home/Away Stats</h3>
+                <p>Compare performance based on venue</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>🤝 Head-to-Head</h3>
+                <p>Historical matchup data between teams</p>
+            </div>
+        </section>
+
+        <section class="cta">
+            <a href="/analysis" class="btn btn-primary">Start Analyzing</a>
+            <a href="/teams" class="btn btn-secondary">Browse Teams</a>
+        </section>
+    </main>
+
+    <%- include('partials/footer') %>
+</body>
+</html>

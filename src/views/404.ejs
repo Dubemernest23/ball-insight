@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <%- include('partials/header') %>
+    
+    <main class="container">
+        <div class="error-page">
+            <h1>404</h1>
+            <h2>Page Not Found</h2>
+            <p>The page you're looking for doesn't exist.</p>
+            <a href="/" class="btn btn-primary">Go Home</a>
+        </div>
+    </main>
+
+    <%- include('partials/footer') %>
+    
+    <style>
+        .error-page {
+            text-align: center;
+            padding: 5rem 2rem;
+        }
+        .error-page h1 {
+            font-size: 6rem;
+            color: #3498db;
+            margin: 0;
+        }
+        .error-page h2 {
+            font-size: 2rem;
+            margin: 1rem 0;
+        }
+        .error-page p {
+            font-size: 1.2rem;
+            margin: 1rem 0 2rem;
+            color: #666;
+        }
+    </style>
+</body>
+</html>
