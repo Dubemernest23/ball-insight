@@ -1,85 +1,173 @@
+// scripts/seed-fd.js
 require('dotenv').config();
+const axios = require('axios');
 const { pool } = require('../src/config/database');
 
-async function seedDatabase() {
+const TOKEN = process.env.FOOTBALL_DATA_TOKEN;
+if (!TOKEN) throw new Error('Add FOOTBALL_DATA_TOKEN to .env');
+
+const API = axios.create({
+  baseURL: 'https://api.football-data.org/v4',
+  headers: { 'X-Auth-Token': TOKEN }
+});
+
+const LEAGUES = [
+  { code: 'PL',  name: 'Premier League', country: 'England' },
+  { code: 'PD',  name: 'La Liga',        country: 'Spain'   },
+  { code: 'SA',  name: 'Serie A',        country: 'Italy'   },
+  { code: 'BL1', name: 'Bundesliga',     country: 'Germany' }
+];
+
+async function clearDb() {
+  console.log('Clearing database...');
+  
+  await pool.query('SET FOREIGN_KEY_CHECKS = 0');
+  
+  // Truncate one table at a time, in correct order
+  await pool.query('TRUNCATE TABLE match_statistics');
+  await pool.query('TRUNCATE TABLE match_events');
+  await pool.query('TRUNCATE TABLE matches');
+  await pool.query('TRUNCATE TABLE analysis_cache');
+  await pool.query('TRUNCATE TABLE teams');
+  await pool.query('TRUNCATE TABLE leagues');
+  
+  await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+  
+  console.log('Database cleared successfully.');
+}
+
+async function seedLeagues() {
+  console.log('Seeding leagues...');
+  for (const l of LEAGUES) {
+    try {
+      const res = await API.get(`/competitions/${l.code}`);
+      const comp = res.data.competition || res.data;
+      await pool.query(
+        `INSERT INTO leagues (id, name, country, season, logo)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE name=VALUES(name), season=VALUES(season), logo=VALUES(logo)`,
+        [
+          comp.id,
+          comp.name,
+          comp.area?.name || l.country,
+          comp.currentSeason?.startDate?.slice(0,4) || 2025,
+          comp.emblem || ''
+        ]
+      );
+      console.log(`  → ${l.name} (ID ${comp.id}, season ${comp.currentSeason?.startDate?.slice(0,4) || 'N/A'})`);
+    } catch (err) {
+      console.error(`Failed to seed league ${l.code}:`, err.message);
+    }
+  }
+}
+
+async function seedTeams() {
+  console.log('Seeding teams...');
+  let total = 0;
+  for (const l of LEAGUES) {
+    try {
+      const res = await API.get(`/competitions/${l.code}/teams`);
+      const teams = res.data.teams || [];
+      console.log(`  ${l.name}: ${teams.length} teams fetched`);
+      for (const t of teams) {
+        await pool.query(
+          `INSERT INTO teams (id, name, code, country, logo)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name=VALUES(name), code=VALUES(code),
+             country=VALUES(country), logo=VALUES(logo)`,
+          [t.id, t.name, t.tla || null, t.area?.name || null, t.crest || null]
+        );
+        total++;
+      }
+    } catch (err) {
+      console.error(`Failed to seed teams for ${l.code}:`, err.message);
+    }
+  }
+  console.log(`Total teams inserted/updated: ${total}`);
+}
+
+async function seedMatches() {
+  console.log('Seeding recent finished matches...');
+  let total = 0;
+  
+  // Limit to first 15 teams to respect rate limit during test
+  const [dbTeams] = await pool.query('SELECT id FROM teams LIMIT 15');
+  const teamIds = dbTeams.map(r => r.id);
+
+  const allowedLeagueIds = [2021, 2014, 2019, 2002]; // only your seeded leagues
+
+  for (const tid of teamIds) {
+    try {
+      console.log(`Fetching matches for team ${tid}...`);
+      const res = await API.get(`/teams/${tid}/matches`, {
+        params: {
+          status: 'FINISHED',
+          limit: 20
+        }
+      });
+      const matches = res.data.matches || [];
+      console.log(`  Team ${tid}: ${matches.length} finished matches returned`);
+
+      for (const m of matches) {
+        // Skip matches from non-seeded leagues (prevents foreign key error)
+        if (!allowedLeagueIds.includes(m.competition.id)) {
+          continue;
+        }
+
+        const matchDate = m.utcDate
+          ? m.utcDate.replace('T', ' ').replace('Z', '')  // Fix datetime format
+          : null;
+
+        await pool.query(
+          `INSERT INTO matches 
+           (id, league_id, season, match_date, home_team_id, away_team_id,
+            home_score, away_score, status, venue)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE 
+             home_score=VALUES(home_score), away_score=VALUES(away_score),
+             status=VALUES(status)`,
+          [
+            m.id,
+            m.competition.id,
+            m.season.startDate.slice(0,4),
+            matchDate,
+            m.homeTeam.id,
+            m.awayTeam.id,
+            m.score.fullTime.home ?? null,
+            m.score.fullTime.away ?? null,
+            m.status,
+            m.venue || ''
+          ]
+        );
+        total++;
+      }
+    } catch (err) {
+      console.error(`Team ${tid} matches failed:`, err.message);
+      if (err.response?.status === 429) {
+        console.log('Rate limit hit — waiting 60 seconds...');
+        await new Promise(r => setTimeout(r, 60000));
+      }
+    }
+    
+    // Safety delay between teams (7 seconds → ~8-9 req/min)
+    await new Promise(r => setTimeout(r, 7000));
+  }
+  
+  console.log(`Total matches seeded (major leagues only): ${total}`);
+}
+
+async function main() {
   try {
-    console.log('🌱 Seeding database...');
-
-    // Insert sample leagues
-    const leagues = [
-      [39, 'Premier League', 'England', 2024, 'https://media.api-sports.io/football/leagues/39.png'],
-      [140, 'La Liga', 'Spain', 2024, 'https://media.api-sports.io/football/leagues/140.png'],
-      [135, 'Serie A', 'Italy', 2024, 'https://media.api-sports.io/football/leagues/135.png'],
-      [78, 'Bundesliga', 'Germany', 2024, 'https://media.api-sports.io/football/leagues/78.png']
-    ];
-
-    for (const league of leagues) {
-      await pool.query(
-        `INSERT INTO leagues (id, name, country, season, logo) 
-         VALUES (?, ?, ?, ?, ?) 
-         ON DUPLICATE KEY UPDATE name=VALUES(name)`,
-        league
-      );
-    }
-    console.log('✅ Seeded 4 leagues');
-
-    // Insert sample teams (Premier League)
-    const teams = [
-      [33, 'Manchester United', 'MUN', 'England', 'https://media.api-sports.io/football/teams/33.png'],
-      [40, 'Liverpool', 'LIV', 'England', 'https://media.api-sports.io/football/teams/40.png'],
-      [50, 'Manchester City', 'MCI', 'England', 'https://media.api-sports.io/football/teams/50.png'],
-      [49, 'Chelsea', 'CHE', 'England', 'https://media.api-sports.io/football/teams/49.png'],
-      [42, 'Arsenal', 'ARS', 'England', 'https://media.api-sports.io/football/teams/42.png'],
-      [47, 'Tottenham', 'TOT', 'England', 'https://media.api-sports.io/football/teams/47.png']
-    ];
-
-    for (const team of teams) {
-      await pool.query(
-        `INSERT INTO teams (id, name, code, country, logo) 
-         VALUES (?, ?, ?, ?, ?) 
-         ON DUPLICATE KEY UPDATE name=VALUES(name)`,
-        team
-      );
-    }
-    console.log('✅ Seeded 6 teams');
-
-    // Insert a sample match
-    await pool.query(
-      `INSERT INTO matches (id, league_id, season, match_date, home_team_id, away_team_id, 
-       home_score, away_score, halftime_home_score, halftime_away_score, status, venue) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE status=VALUES(status)`,
-      [1234567, 39, 2024, '2024-02-03 15:00:00', 49, 42, 2, 1, 1, 0, 'FT', 'Stamford Bridge']
-    );
-    console.log('✅ Seeded 1 sample match (Chelsea 2-1 Arsenal)');
-
-    // Insert sample match events
-    const events = [
-      [1234567, 49, 'Raheem Sterling', 'Goal', 'Normal Goal', 23, 0, 'Assisted by Cole Palmer'],
-      [1234567, 42, 'Bukayo Saka', 'Goal', 'Normal Goal', 67, 0, 'Penalty'],
-      [1234567, 49, 'Cole Palmer', 'Goal', 'Normal Goal', 81, 0, 'Free-kick']
-    ];
-
-    for (const event of events) {
-      await pool.query(
-        `INSERT INTO match_events (match_id, team_id, player_name, event_type, event_detail, 
-         time_elapsed, time_extra, comments) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        event
-      );
-    }
-    console.log('✅ Seeded 3 match events (goals)');
-
-    console.log('\n🎉 Database seeded successfully!');
-    console.log('You can now test the application with sample data.');
-
-  } catch (error) {
-    console.error('❌ Seeding failed:', error.message);
-    process.exit(1);
+    await clearDb();
+    await seedLeagues();
+    await seedTeams();
+    await seedMatches();
+    console.log('\nSeeding complete! Check your DB and test the app.');
+  } catch (err) {
+    console.error('Seeding process error:', err);
   } finally {
     await pool.end();
   }
 }
 
-// Run seeding
-seedDatabase();
+main();

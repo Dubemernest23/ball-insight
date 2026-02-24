@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/analysis.css">
+</head>
+<body>
+    <%- include('../partials/header') %>
+    
+    <main class="container">
+        <section class="analysis-hero">
+            <h1>⚽ Football Match Analysis</h1>
+            <p>Analyze team performance, goal timing, and betting patterns</p>
+        </section>
+
+        <!-- Analysis Type Selector -->
+        <div class="analysis-tabs">
+            <button class="tab-btn active" data-tab="single">Single Team Analysis</button>
+            <button class="tab-btn" data-tab="h2h">Head-to-Head</button>
+        </div>
+
+        <!-- Single Team Analysis Form -->
+        <div id="single-analysis" class="tab-content active">
+            <div class="analysis-form-card">
+                <h2>Analyze Team Performance</h2>
+                <form id="singleTeamForm">
+                    <div class="form-group">
+                        <label for="team">Select Team:</label>
+                        <select id="team" name="team" required>
+                            <option value="">-- Choose a team --</option>
+                            <% if (teams && teams.length > 0) { %>
+                                <% teams.forEach(team => { %>
+                                    <option value="<%= team.id %>"><%= team.name %></option>
+                                <% }); %>
+                            <% } else { %>
+                                <option value="">No teams available (run seed script)</option>
+                            <% } %>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="matches">Number of Matches:</label>
+                        <select id="matches" name="matches">
+                            <option value="5">Last 5 matches</option>
+                            <option value="10" selected>Last 10 matches</option>
+                            <option value="15">Last 15 matches</option>
+                            <option value="20">Last 20 matches</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="homeAway">Match Type:</label>
+                        <select id="homeAway" name="homeAway">
+                            <option value="both">Home & Away</option>
+                            <option value="home">Home Only</option>
+                            <option value="away">Away Only</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <span class="btn-text">Analyze Team</span>
+                        <span class="btn-loader" style="display: none;">⏳ Analyzing...</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Head-to-Head Analysis Form -->
+        <div id="h2h-analysis" class="tab-content">
+            <div class="analysis-form-card">
+                <h2>Head-to-Head Analysis</h2>
+                <form id="h2hForm">
+                    <div class="form-group">
+                        <label for="team1">Team 1:</label>
+                        <select id="team1" name="team1" required>
+                            <option value="">-- Choose team 1 --</option>
+                            <% if (teams && teams.length > 0) { %>
+                                <% teams.forEach(team => { %>
+                                    <option value="<%= team.id %>"><%= team.name %></option>
+                                <% }); %>
+                            <% } %>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="team2">Team 2:</label>
+                        <select id="team2" name="team2" required>
+                            <option value="">-- Choose team 2 --</option>
+                            <% if (teams && teams.length > 0) { %>
+                                <% teams.forEach(team => { %>
+                                    <option value="<%= team.id %>"><%= team.name %></option>
+                                <% }); %>
+                            <% } %>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="h2hMatches">Number of Matches:</label>
+                        <select id="h2hMatches" name="matches">
+                            <option value="5">Last 5 matches each</option>
+                            <option value="10" selected>Last 10 matches each</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <span class="btn-text">Compare Teams</span>
+                        <span class="btn-loader" style="display: none;">⏳ Analyzing...</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Results Container -->
+        <div id="results-container" style="display: none;">
+            <!-- Results will be dynamically inserted here -->
+        </div>
+    </main>
+
+    <%- include('../partials/footer') %>
+
+    <script src="/js/analysis.js"></script>
+</body>
+</html>

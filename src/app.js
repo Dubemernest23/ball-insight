@@ -7,13 +7,13 @@ const bodyParser = require('body-parser');
 const session = require('express-session');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3434;
 
 // Import routes
 const indexRoutes = require('./routes/index');
-// const matchRoutes = require('./routes/matches');
-// const analysisRoutes = require('./routes/analysis');
-// const teamRoutes = require('./routes/teams');
+const matchRoutes = require('./routes/matches');
+const analysisRoutes = require('./routes/analysis');
+const teamRoutes = require('./routes/team');
 
 // Security middleware
 app.use(helmet());
@@ -40,13 +40,16 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
 app.use('/', indexRoutes);
-// app.use('/matches', matchRoutes);
-// app.use('/analysis', analysisRoutes);
-// app.use('/teams', teamRoutes);
+app.use('/matches', matchRoutes);
+app.use('/analysis', analysisRoutes);
+app.use('/teams', teamRoutes);
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).render('404', { title: '404 - Not Found' });
+  res.status(404).render('404', { 
+    title: '404 - Not Found',
+    page: '404'
+  });
 });
 
 // Error handler
@@ -54,20 +57,30 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).render('error', { 
     title: 'Error',
+    page: 'error',
     error: process.env.NODE_ENV === 'development' ? err : {}
   });
 });
 
 // Import database connection
-// const { testConnection } = require('./config/database');
+const { testConnection } = require('./config/database');
 
 // Start server
-app.listen(PORT, async () => {
-  console.log(`🚀 Football Analytics Tool running on http://localhost:${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  
-  // Test database connection
-//   await testConnection();
-});
+async function startServer() {
+  try {
+    await testConnection();
+    app.listen(PORT, () => {
+      console.log(`🚀 Football Analytics Tool running on http://localhost:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+
+  } catch (error) {
+    console.error("❌ Server Startup Failed");
+    console.error(error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 module.exports = app;

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <%- include('../partials/header') %>
+    
+    <main class="container">
+        <section class="page-header">
+            <h1>Recent Matches</h1>
+            <p>Browse recent football matches and results</p>
+        </section>
+
+        <% if (matches && matches.length > 0) { %>
+            <div class="matches-grid">
+                <% matches.forEach(match => { %>
+                    <div class="match-card">
+                        <div class="match-date">
+                            <%= new Date(match.match_date).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                            }) %>
+                        </div>
+                        
+                        <div class="match-content">
+                            <div class="team home-team">
+                                <span class="team-name"><%= match.home_team_name %></span>
+                                <span class="team-score <%= match.home_score > match.away_score ? 'winner' : '' %>">
+                                    <%= match.home_score %>
+                                </span>
+                            </div>
+                            
+                            <div class="match-divider">vs</div>
+                            
+                            <div class="team away-team">
+                                <span class="team-score <%= match.away_score > match.home_score ? 'winner' : '' %>">
+                                    <%= match.away_score %>
+                                </span>
+                                <span class="team-name"><%= match.away_team_name %></span>
+                            </div>
+                        </div>
+                        
+                        <% if (match.halftime_home_score !== null && match.halftime_away_score !== null) { %>
+                            <div class="match-halftime">
+                                HT: <%= match.halftime_home_score %> - <%= match.halftime_away_score %>
+                            </div>
+                        <% } %>
+                        
+                        <% if (match.venue) { %>
+                            <div class="match-venue">
+                                📍 <%= match.venue %>
+                            </div>
+                        <% } %>
+                        
+                        <div class="match-actions">
+                            <a href="/matches/<%= match.id %>" class="btn btn-secondary btn-sm">View Details</a>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <h3>No Matches Found</h3>
+                <p>No match data available yet. Run the seed script or fetch data from API:</p>
+                <code>npm run db:seed</code>
+            </div>
+        <% } %>
+    </main>
+
+    <%- include('../partials/footer') %>
+
+    <style>
+        .page-header {
+            text-align: center;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+
+        .page-header h1 {
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .matches-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .match-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .match-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+
+        .match-date {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .match-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .team {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .team-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .team-score {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #7f8c8d;
+        }
+
+        .team-score.winner {
+            color: #27ae60;
+        }
+
+        .match-divider {
+            color: #bdc3c7;
+            font-size: 0.9rem;
+            padding: 0 1rem;
+        }
+
+        .match-halftime {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .match-venue {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-bottom: 1rem;
+        }
+
+        .match-actions {
+            text-align: center;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: white;
+            border-radius: 10px;
+        }
+
+        .empty-state h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state code {
+            background: #f8f9fa;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            display: inline-block;
+            margin-top: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .matches-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>

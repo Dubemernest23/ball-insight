@@ -18,7 +18,7 @@ async function runMigration() {
     console.log('📦 Connected to MySQL server');
 
     // Create database if it doesn't exist
-    const dbName = process.env.DB_NAME || 'football_analytics';
+    const dbName = process.env.DB_NAME || 'ballInsightDB';
     await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbName}`);
     console.log(`✅ Database '${dbName}' created or already exists`);
 
