@@ -1,173 +1,212 @@
-// scripts/seed-fd.js
 require('dotenv').config();
-const axios = require('axios');
 const { pool } = require('../src/config/database');
+const footballData = require('../src/services/apiService');
 
-const TOKEN = process.env.FOOTBALL_DATA_TOKEN;
-if (!TOKEN) throw new Error('Add FOOTBALL_DATA_TOKEN to .env');
+/**
+ * DYNAMIC SEED SCRIPT - Fetches Real Data from Football-Data.org API
+ *
+ * KEY FIX: We now build a teamIdMap (apiTeamId → dbTeamId) while seeding
+ * teams, then use that map when inserting matches.  This prevents the
+ * foreign-key violations that occurred when a match referenced a team ID
+ * that was not yet (or never) stored in the `teams` table.
+ */
 
-const API = axios.create({
-  baseURL: 'https://api.football-data.org/v4',
-  headers: { 'X-Auth-Token': TOKEN }
-});
+async function seedFromAPI() {
+  console.log('🌱 Seeding database from Football-Data.org API...\n');
 
-const LEAGUES = [
-  { code: 'PL',  name: 'Premier League', country: 'England' },
-  { code: 'PD',  name: 'La Liga',        country: 'Spain'   },
-  { code: 'SA',  name: 'Serie A',        country: 'Italy'   },
-  { code: 'BL1', name: 'Bundesliga',     country: 'Germany' }
-];
-
-async function clearDb() {
-  console.log('Clearing database...');
-  
-  await pool.query('SET FOREIGN_KEY_CHECKS = 0');
-  
-  // Truncate one table at a time, in correct order
-  await pool.query('TRUNCATE TABLE match_statistics');
-  await pool.query('TRUNCATE TABLE match_events');
-  await pool.query('TRUNCATE TABLE matches');
-  await pool.query('TRUNCATE TABLE analysis_cache');
-  await pool.query('TRUNCATE TABLE teams');
-  await pool.query('TRUNCATE TABLE leagues');
-  
-  await pool.query('SET FOREIGN_KEY_CHECKS = 1');
-  
-  console.log('Database cleared successfully.');
-}
-
-async function seedLeagues() {
-  console.log('Seeding leagues...');
-  for (const l of LEAGUES) {
-    try {
-      const res = await API.get(`/competitions/${l.code}`);
-      const comp = res.data.competition || res.data;
-      await pool.query(
-        `INSERT INTO leagues (id, name, country, season, logo)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE name=VALUES(name), season=VALUES(season), logo=VALUES(logo)`,
-        [
-          comp.id,
-          comp.name,
-          comp.area?.name || l.country,
-          comp.currentSeason?.startDate?.slice(0,4) || 2025,
-          comp.emblem || ''
-        ]
-      );
-      console.log(`  → ${l.name} (ID ${comp.id}, season ${comp.currentSeason?.startDate?.slice(0,4) || 'N/A'})`);
-    } catch (err) {
-      console.error(`Failed to seed league ${l.code}:`, err.message);
-    }
-  }
-}
-
-async function seedTeams() {
-  console.log('Seeding teams...');
-  let total = 0;
-  for (const l of LEAGUES) {
-    try {
-      const res = await API.get(`/competitions/${l.code}/teams`);
-      const teams = res.data.teams || [];
-      console.log(`  ${l.name}: ${teams.length} teams fetched`);
-      for (const t of teams) {
-        await pool.query(
-          `INSERT INTO teams (id, name, code, country, logo)
-           VALUES (?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE name=VALUES(name), code=VALUES(code),
-             country=VALUES(country), logo=VALUES(logo)`,
-          [t.id, t.name, t.tla || null, t.area?.name || null, t.crest || null]
-        );
-        total++;
-      }
-    } catch (err) {
-      console.error(`Failed to seed teams for ${l.code}:`, err.message);
-    }
-  }
-  console.log(`Total teams inserted/updated: ${total}`);
-}
-
-async function seedMatches() {
-  console.log('Seeding recent finished matches...');
-  let total = 0;
-  
-  // Limit to first 15 teams to respect rate limit during test
-  const [dbTeams] = await pool.query('SELECT id FROM teams LIMIT 15');
-  const teamIds = dbTeams.map(r => r.id);
-
-  const allowedLeagueIds = [2021, 2014, 2019, 2002]; // only your seeded leagues
-
-  for (const tid of teamIds) {
-    try {
-      console.log(`Fetching matches for team ${tid}...`);
-      const res = await API.get(`/teams/${tid}/matches`, {
-        params: {
-          status: 'FINISHED',
-          limit: 20
-        }
-      });
-      const matches = res.data.matches || [];
-      console.log(`  Team ${tid}: ${matches.length} finished matches returned`);
-
-      for (const m of matches) {
-        // Skip matches from non-seeded leagues (prevents foreign key error)
-        if (!allowedLeagueIds.includes(m.competition.id)) {
-          continue;
-        }
-
-        const matchDate = m.utcDate
-          ? m.utcDate.replace('T', ' ').replace('Z', '')  // Fix datetime format
-          : null;
-
-        await pool.query(
-          `INSERT INTO matches 
-           (id, league_id, season, match_date, home_team_id, away_team_id,
-            home_score, away_score, status, venue)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE 
-             home_score=VALUES(home_score), away_score=VALUES(away_score),
-             status=VALUES(status)`,
-          [
-            m.id,
-            m.competition.id,
-            m.season.startDate.slice(0,4),
-            matchDate,
-            m.homeTeam.id,
-            m.awayTeam.id,
-            m.score.fullTime.home ?? null,
-            m.score.fullTime.away ?? null,
-            m.status,
-            m.venue || ''
-          ]
-        );
-        total++;
-      }
-    } catch (err) {
-      console.error(`Team ${tid} matches failed:`, err.message);
-      if (err.response?.status === 429) {
-        console.log('Rate limit hit — waiting 60 seconds...');
-        await new Promise(r => setTimeout(r, 60000));
-      }
-    }
-    
-    // Safety delay between teams (7 seconds → ~8-9 req/min)
-    await new Promise(r => setTimeout(r, 7000));
-  }
-  
-  console.log(`Total matches seeded (major leagues only): ${total}`);
-}
-
-async function main() {
   try {
-    await clearDb();
-    await seedLeagues();
-    await seedTeams();
-    await seedMatches();
-    console.log('\nSeeding complete! Check your DB and test the app.');
-  } catch (err) {
-    console.error('Seeding process error:', err);
+    const competitionsToSeed = [
+      { code: 'PL',  name: 'Premier League' },
+      { code: 'BL1', name: 'Bundesliga'     },
+      { code: 'SA',  name: 'Serie A'        },
+      { code: 'PD',  name: 'La Liga'        }
+    ];
+
+    let totalTeams   = 0;
+    let totalMatches = 0;
+
+    for (const comp of competitionsToSeed) {
+      console.log(`\n📊 Processing ${comp.name}...`);
+
+      try {
+        // ── Step 1: Seed league ────────────────────────────────────────────
+        const competitionId = footballData.getCompetitionId(comp.code);
+        const countryMap = { PL: 'England', BL1: 'Germany', SA: 'Italy', PD: 'Spain' };
+
+        await pool.query(`
+          INSERT INTO leagues (id, name, country, season, logo)
+          VALUES (?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE name = VALUES(name)
+        `, [
+          competitionId,
+          comp.name,
+          countryMap[comp.code] || 'Unknown',
+          2024,
+          `https://crests.football-data.org/${comp.code}.png`
+        ]);
+        console.log(`✅ Seeded league: ${comp.name}`);
+
+        // ── Step 2: Fetch & seed teams ─────────────────────────────────────
+        console.log(`📥 Fetching teams...`);
+        const teamsData = await footballData.getCompetitionTeams(comp.code, 2025);
+
+        // FIX: Build a map of  apiTeamId → dbTeamId  as we insert each team.
+        // The API uses its own numeric IDs; we store those same IDs as the
+        // primary key (ON DUPLICATE KEY handles re-runs), so the map is
+        // straightforward — but having it explicit makes the match-insertion
+        // step safe and easy to validate.
+        const teamIdMap = {}; // { apiId: dbId }
+
+        if (teamsData && teamsData.teams) {
+          for (const teamData of teamsData.teams) {
+            const team = footballData.convertTeamToOurFormat(teamData);
+
+            await pool.query(`
+              INSERT INTO teams (id, name, code, country, logo)
+              VALUES (?, ?, ?, ?, ?)
+              ON DUPLICATE KEY UPDATE
+                name  = VALUES(name),
+                logo  = VALUES(logo)
+            `, [team.id, team.name, team.code, team.country, team.logo]);
+
+            // Map the API id to the DB id (same value, but now guaranteed to exist)
+            teamIdMap[team.id] = team.id;
+          }
+
+          totalTeams += teamsData.teams.length;
+          console.log(`✅ Seeded ${teamsData.teams.length} teams`);
+        }
+
+        // Rate-limit pause
+        console.log('⏳ Waiting 6 seconds (rate limit)...');
+        await footballData.delay(6000);
+
+        // ── Step 3: Fetch & seed recent matches ────────────────────────────
+        console.log(`📥 Fetching recent matches...`);
+        const matchesData = await footballData.getCompetitionMatches(comp.code, 'FINISHED', 2025);
+
+        if (matchesData && matchesData.matches) {
+          const recentMatches = matchesData.matches.slice(0, 20);
+          let seededCount = 0;
+
+          for (const rawMatch of recentMatches) {
+            try {
+              // FIX: pass teamIdMap so home_team_id / away_team_id are
+              // resolved to IDs that actually exist in the `teams` table.
+              const match = footballData.convertMatchToOurFormat(rawMatch, teamIdMap);
+
+              // FIX: skip matches whose teams we didn't seed (e.g. cup
+              // rounds involving lower-league clubs not in our 20 teams).
+              if (!match.home_team_id || !match.away_team_id) {
+                console.warn(`⚠️  Skipping match ${rawMatch.id}: team not in seeded list ` +
+                  `(home: ${rawMatch.homeTeam?.name}, away: ${rawMatch.awayTeam?.name})`);
+                continue;
+              }
+
+              const matchDate = new Date(match.match_date)
+                .toISOString()
+                .slice(0, 19)
+                .replace('T', ' ');
+
+              await pool.query(`
+                INSERT INTO matches
+                  (id, league_id, season, match_date, home_team_id, away_team_id,
+                   home_score, away_score, halftime_home_score, halftime_away_score,
+                   status, venue)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                  home_score             = VALUES(home_score),
+                  away_score             = VALUES(away_score),
+                  halftime_home_score    = VALUES(halftime_home_score),
+                  halftime_away_score    = VALUES(halftime_away_score),
+                  status                 = VALUES(status)
+              `, [
+                match.id,
+                match.league_id,
+                match.season,
+                matchDate,
+                match.home_team_id,
+                match.away_team_id,
+                match.home_score,
+                match.away_score,
+                match.halftime_home_score,
+                match.halftime_away_score,
+                match.status,
+                match.venue
+              ]);
+
+              // Seed goal events (also pass teamIdMap for accurate team_id)
+              const events = footballData.extractGoalEvents(rawMatch, teamIdMap);
+              for (const event of events) {
+                // Skip events whose team_id isn't in our seeded set
+                if (!event.team_id || !teamIdMap[event.team_id]) continue;
+
+                await pool.query(`
+                  INSERT INTO match_events
+                    (match_id, team_id, player_name, event_type, event_detail,
+                     time_elapsed, time_extra, comments)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  ON DUPLICATE KEY UPDATE time_elapsed = VALUES(time_elapsed)
+                `, [
+                  event.match_id,
+                  event.team_id,
+                  event.player_name,
+                  event.event_type,
+                  event.event_detail,
+                  event.time_elapsed,
+                  event.time_extra  || 0,
+                  event.comments    || ''
+                ]);
+              }
+
+              seededCount++;
+              totalMatches++;
+            } catch (matchError) {
+              console.error(`⚠️  Error seeding match ${rawMatch.id}:`, matchError.message);
+              // Continue with next match
+            }
+          }
+
+          console.log(`✅ Seeded ${seededCount} matches with events`);
+        }
+
+        // Pause before next competition (skip on last iteration)
+        if (comp !== competitionsToSeed[competitionsToSeed.length - 1]) {
+          console.log('⏳ Waiting 6 seconds before next competition...');
+          await footballData.delay(6000);
+        }
+
+      } catch (compError) {
+        console.error(`❌ Error processing ${comp.name}:`, compError.message);
+        // Continue with next competition
+      }
+    }
+
+    console.log('\n' + '='.repeat(60));
+    console.log('🎉 Database seeding completed!');
+    console.log('='.repeat(60));
+    console.log(`📊 Total leagues seeded : ${competitionsToSeed.length}`);
+    console.log(`👥 Total teams seeded   : ${totalTeams}`);
+    console.log(`⚽ Total matches seeded : ${totalMatches}`);
+    console.log('='.repeat(60));
+    console.log('\n✅ You can now:');
+    console.log('   1. Start the server : npm run dev');
+    console.log('   2. Visit            : http://localhost:3000/analysis');
+    console.log('   3. Select any team and analyze!\n');
+
+  } catch (error) {
+    console.error('\n❌ Seeding failed:', error.message);
+    console.error('💡 Make sure:');
+    console.error('   - FOOTBALL_DATA_API_KEY is set in .env');
+    console.error('   - MySQL is running');
+    console.error('   - You ran: npm run db:migrate');
+    process.exit(1);
   } finally {
     await pool.end();
   }
 }
 
-main();
+console.log('🚀 Starting dynamic seed from Football-Data.org API...');
+console.log('⏱️  This will take ~2-3 minutes due to rate limiting (10 req/min)');
+console.log('');
+seedFromAPI();

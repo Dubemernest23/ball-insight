@@ -14,14 +14,18 @@
   "author": "duby",
   "type": "commonjs",
   "main": "app.js",
-   "scripts": {
+  "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "test": "jest",
     "test:setup": "node scripts/test-setup.js",
     "test:api": "node scripts/test-api.js",
     "db:migrate": "node scripts/migrate.js",
-    "db:seed": "node scripts/seed.js"
+    "db:seed": "node scripts/seed.js",
+    "db:clear": "node scripts/cleardb.js",
+    "refresh": "node scripts/manualRefresh.js",
+    "refresh:matches": "node scripts/manualRefresh.js matches",
+    "refresh:standings": "node scripts/manualRefresh.js standings"
   },
   "keywords": [
     "football",
@@ -39,7 +43,8 @@
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
     "latest": "^0.2.0",
-    "mysql2": "^3.17.1"
+    "mysql2": "^3.17.1",
+    "node-cron": "^4.2.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",

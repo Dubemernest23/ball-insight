@@ -1,292 +1,362 @@
 const { pool } = require('../config/database');
-const apiFootballData = require('./apiService');  // ← Using football-data.org now
+const footballData = require('./apiService');
 
 /**
- * Analysis Service
- * Implements Cache-Aside Pattern for efficient data fetching
- * Analyzes goal timing, BTTS, Over/Under, First to Score patterns
+ * Analysis Service - Cache-Aside Pattern
+ * Analyzes goal timing, BTTS, Over/Under, First to Score, Home/Away patterns.
+ *
+ * FIX: fetchAndStoreMatches now validates that both home_team_id and
+ * away_team_id exist in the `teams` table before inserting a match, 
+ * preventing foreign-key violations when the analysisService fetches
+ * matches on-the-fly for a team that has opponents not yet in the DB.
+ *
+ * FIX: halftime score field corrected from `halftime` → `halfTime`
+ * (matches the actual Football-Data.org API response shape).
  */
+
 class AnalysisService {
-  
-  /**
-   * Main analysis function - implements cache-aside pattern
-   * @param {number} teamId - Team ID to analyze
-   * @param {number} numMatches - Number of matches to analyze (default: 10)
-   * @param {string} homeAway - 'home', 'away', or 'both' (default: 'both')
-   * @returns {object} Complete analysis results
-   */
+
+  // ─── Public Entry Point ──────────────────────────────────────────────────────
+
   async analyzeTeam(teamId, numMatches = 10, homeAway = 'both') {
-    console.log(`📊 Analyzing team ${teamId} - Last ${numMatches} matches (${homeAway})`);
+    console.log(`📊 Analyzing team ${teamId} — Last ${numMatches} matches (${homeAway})`);
 
-    // Step 1: Check cache first
-    const cached = await this.checkCache(teamId, numMatches, homeAway);
-    if (cached) {
-      console.log('✅ Serving from cache');
-      return cached;
+    try {
+      const cached = await this.checkCache(teamId, numMatches, homeAway);
+      if (cached) {
+        console.log('✅ Serving from cache');
+        return cached;
+      }
+
+      console.log('🔄 Cache miss — fetching fresh data...');
+
+      await this.getTeamData(teamId);
+      const matches            = await this.getMatches(teamId, numMatches, homeAway);
+      const matchesWithEvents  = await this.getMatchEvents(matches);
+      const analysis           = await this.runAnalysis(teamId, matchesWithEvents);
+
+      await this.cacheResults(teamId, numMatches, homeAway, analysis);
+      return analysis;
+
+    } catch (error) {
+      console.error('Error in analyzeTeam:', error);
+      throw error;
     }
-
-    console.log('🔄 Cache miss - fetching fresh data...');
-
-    // Step 2: Get team data
-    const team = await this.getTeamData(teamId);
-    if (!team) {
-      console.warn(`Team ${teamId} not found`);
-    }
-
-    // Step 3: Get matches (DB first, then API)
-    const matches = await this.getMatches(teamId, numMatches, homeAway);
-
-    // Step 4: Get events for matches
-    const matchesWithEvents = await this.getMatchEvents(matches);
-
-    // Step 5: Run analysis
-    const analysis = this.runAnalysis(teamId, matchesWithEvents);
-
-    // Step 6: Cache results
-    await this.cacheResults(teamId, numMatches, homeAway, analysis);
-
-    return analysis;
   }
 
-  /**
-   * Safe cache check - handles both string and object from DB
-   */
+  // ─── Cache ───────────────────────────────────────────────────────────────────
+
   async checkCache(teamId, numMatches, homeAway) {
     try {
       const [rows] = await pool.query(`
-        SELECT data, created_at 
-        FROM analysis_cache 
-        WHERE team_id = ? 
-          AND analysis_type = 'team_analysis'
+        SELECT data FROM analysis_cache
+        WHERE team_id        = ?
+          AND analysis_type  = 'team_analysis'
           AND matches_analyzed = ?
-          AND home_away = ?
-          AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          AND home_away      = ?
+          AND created_at     > DATE_SUB(NOW(), INTERVAL 24 HOUR)
         ORDER BY created_at DESC
         LIMIT 1
       `, [teamId, numMatches, homeAway]);
 
-      if (rows.length === 0) return null;
-
-      const rawData = rows[0].data;
-
-      if (typeof rawData === 'object' && rawData !== null) {
-        console.log(`Cache hit - already object for team ${teamId}`);
-        return rawData;
-      }
-
-      if (typeof rawData === 'string') {
-        try {
-          const parsed = JSON.parse(rawData);
-          console.log(`Cache hit - parsed string for team ${teamId}`);
-          return parsed;
-        } catch (parseErr) {
-          console.error(`Cache parse failed for team ${teamId}:`, parseErr.message);
-          console.error('Raw (first 100 chars):', rawData.substring(0, 100));
-          return null;
-        }
-      }
-
-      console.warn(`Unexpected cache data type for team ${teamId}:`, typeof rawData);
-      return null;
+      return rows.length > 0 ? JSON.parse(rows[0].data) : null;
     } catch (error) {
-      console.error('Error checking cache:', error.message);
+      console.error('Error checking cache:', error);
       return null;
     }
   }
+
+  async cacheResults(teamId, numMatches, homeAway, analysis) {
+    try {
+      await pool.query(`
+        INSERT INTO analysis_cache
+          (team_id, analysis_type, time_period, home_away, data, matches_analyzed, expires_at)
+        VALUES (?, 'team_analysis', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))
+      `, [teamId, `last_${numMatches}`, homeAway, JSON.stringify(analysis), numMatches]);
+      console.log('✅ Analysis cached for 24 hours');
+    } catch (error) {
+      console.error('Error caching results:', error);
+    }
+  }
+
+  // ─── Team Data ───────────────────────────────────────────────────────────────
 
   async getTeamData(teamId) {
     try {
       const [rows] = await pool.query('SELECT * FROM teams WHERE id = ?', [teamId]);
       if (rows.length > 0) return rows[0];
 
-      console.log(`⚠️ Team ${teamId} not in DB - no API fetch implemented yet`);
-      return null;
+      console.log('⚠️ Team not in database, fetching from API...');
+      const apiTeam = await footballData.getTeam(teamId);
+      const team    = footballData.convertTeamToOurFormat(apiTeam);
+
+      await pool.query(`
+        INSERT INTO teams (id, name, code, country, logo)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [team.id, team.name, team.code, team.country, team.logo]);
+
+      return team;
     } catch (error) {
-      console.error('Error getting team data:', error.message);
-      return null;
+      console.error('Error getting team data:', error);
+      throw error;
     }
   }
 
-  async getMatches(teamId, numMatches, homeAway) {
+  // ─── Match Fetching ──────────────────────────────────────────────────────────
+
+  async getMatches(teamId, numMatches, homeAway = 'both', leagueId = null) {
     try {
-      let whereClause = '';
-      let params = [teamId, teamId];
+      let whereClauses = ['(m.status = ? OR m.status = ?)'];
+      let params       = ['FT', 'FINISHED'];
 
       if (homeAway === 'home') {
-        whereClause = 'WHERE m.home_team_id = ?';
-        params = [teamId];
+        whereClauses.push('m.home_team_id = ?');
+        params.push(teamId);
       } else if (homeAway === 'away') {
-        whereClause = 'WHERE m.away_team_id = ?';
-        params = [teamId];
+        whereClauses.push('m.away_team_id = ?');
+        params.push(teamId);
       } else {
-        whereClause = 'WHERE (m.home_team_id = ? OR m.away_team_id = ?)';
+        whereClauses.push('(m.home_team_id = ? OR m.away_team_id = ?)');
+        params.push(teamId, teamId);
       }
 
-      const [matches] = await pool.query(`
-        SELECT m.*, 
-               ht.name as home_team_name,
-               at.name as away_team_name
-        FROM matches m
-        JOIN teams ht ON m.home_team_id = ht.id
-        JOIN teams at ON m.away_team_id = at.id
-        ${whereClause}
-          AND m.status = 'FINISHED'
-        ORDER BY m.match_date DESC
-        LIMIT ?
-      `, [...params, numMatches]);
-
-      if (matches.length < numMatches) {
-        console.log(`⚠️ Only ${matches.length}/${numMatches} matches in DB - fetching from football-data.org...`);
-        await this.fetchAndStoreMatches(teamId, numMatches);
-
-        const [newMatches] = await pool.query(`
-          SELECT m.*, 
-                 ht.name as home_team_name,
-                 at.name as away_team_name
-          FROM matches m
-          JOIN teams ht ON m.home_team_id = ht.id
-          JOIN teams at ON m.away_team_id = at.id
-          ${whereClause}
-            AND m.status = 'FINISHED'
-          ORDER BY m.match_date DESC
-          LIMIT ?
-        `, [...params, numMatches]);
-
-        return newMatches;
+      if (leagueId) {
+        whereClauses.push('m.league_id = ?');
+        params.push(leagueId);
       }
 
-      return matches;
+      const whereSQL = whereClauses.join(' AND ');
+      params.push(numMatches);
+
+      const query = `
+        SELECT m.*,
+               ht.name AS home_team_name,
+               at.name AS away_team_name
+        FROM   matches m
+        JOIN   teams ht ON m.home_team_id = ht.id
+        JOIN   teams at ON m.away_team_id = at.id
+        WHERE  ${whereSQL}
+        ORDER  BY m.match_date DESC
+        LIMIT  ?
+      `;
+
+      let [rows] = await pool.query(query, params);
+
+      if (rows.length < numMatches / 2) {
+        console.log(`Only ${rows.length} matches in DB — fetching from API...`);
+        await this.fetchAndStoreMatches(teamId, numMatches * 2);
+        [rows] = await pool.query(query, params);
+      }
+
+      return rows;
     } catch (error) {
-      console.error('Error getting matches:', error.message);
+      console.error('Error getting matches:', error);
       throw error;
     }
   }
 
   /**
-   * Fetch recent finished matches from football-data.org and store them
+   * Fetch matches from API and store safely.
+   *
+   * FIX: Before inserting each match we check that both team IDs already
+   * exist in our `teams` table.  If a team is missing we attempt to upsert
+   * it from the API response data embedded in the match object, falling
+   * back to a live API call.  This prevents the FK violation that fires
+   * when a match references a club we haven't seeded yet.
    */
   async fetchAndStoreMatches(teamId, numMatches) {
     try {
-      console.log(`[FootballData] Fetching last ${numMatches} finished matches for team ${teamId}`);
+      console.log('🌐 Fetching from Football-Data.org API...');
 
-      const matches = await apiFootballData.getTeamRecentMatches(teamId, numMatches);
-
-      if (matches.length === 0) {
-        console.warn(`[FootballData] No finished matches found for team ${teamId}`);
+      const apiResponse = await footballData.getTeamMatches(teamId, 'FINISHED', numMatches);
+      if (!apiResponse || !apiResponse.matches) {
+        console.log('⚠️ No matches returned from API');
         return;
       }
 
+      const rawMatches = apiResponse.matches;
+      console.log(`📥 Fetched ${rawMatches.length} matches from API`);
+
       let storedCount = 0;
 
-      for (const m of matches) {
+      for (const rawMatch of rawMatches) {
         try {
-          const matchDate = m.utcDate
-            ? m.utcDate.replace('T', ' ').replace('Z', '')
-            : null;
+          // ── Ensure both teams exist in DB ──────────────────────────────
+          await this.ensureTeamExists(rawMatch.homeTeam);
+          await this.ensureTeamExists(rawMatch.awayTeam);
+
+          // ── Convert & insert match ─────────────────────────────────────
+          // No teamIdMap needed here because ensureTeamExists guarantees
+          // the raw API ids are present as DB primary keys.
+          const match     = footballData.convertMatchToOurFormat(rawMatch);
+          const matchDate = new Date(match.match_date)
+            .toISOString()
+            .slice(0, 19)
+            .replace('T', ' ');
+
+          if (!match.home_team_id || !match.away_team_id) {
+            console.warn(`⚠️  Skipping match ${rawMatch.id}: missing team id`);
+            continue;
+          }
 
           await pool.query(`
-            INSERT INTO matches 
-            (id, league_id, season, match_date, home_team_id, away_team_id, 
-             home_score, away_score, status, venue)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO matches
+              (id, league_id, season, match_date, home_team_id, away_team_id,
+               home_score, away_score, halftime_home_score, halftime_away_score,
+               status, venue)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-              home_score = VALUES(home_score),
-              away_score = VALUES(away_score),
-              status = VALUES(status),
-              venue = VALUES(venue)
+              home_score           = VALUES(home_score),
+              away_score           = VALUES(away_score),
+              halftime_home_score  = VALUES(halftime_home_score),
+              halftime_away_score  = VALUES(halftime_away_score),
+              status               = VALUES(status)
           `, [
-            m.id,
-            m.competition.id,
-            m.season.startDate.slice(0, 4),
+            match.id,
+            match.league_id,
+            match.season,
             matchDate,
-            m.homeTeam.id,
-            m.awayTeam.id,
-            m.score.fullTime.home ?? null,
-            m.score.fullTime.away ?? null,
-            m.status,
-            m.venue || ''
+            match.home_team_id,
+            match.away_team_id,
+            match.home_score,
+            match.away_score,
+            match.halftime_home_score,
+            match.halftime_away_score,
+            match.status,
+            match.venue
           ]);
 
-          // Optional: store basic goal events (expand later with getMatchDetails)
-          await this.storeBasicGoalEvents(m.id, m);
-
+          await this.fetchAndStoreEvents(match.id, rawMatch);
           storedCount++;
-        } catch (insertErr) {
-          console.error(`Failed to store match ${m.id}:`, insertErr.message);
+
+          if (storedCount < rawMatches.length) {
+            await footballData.delay(6000);
+          }
+        } catch (matchError) {
+          console.error(`Error storing match ${rawMatch.id}:`, matchError.message);
         }
       }
 
-      console.log(`[FootballData] Stored/updated ${storedCount} matches for team ${teamId}`);
+      console.log(`✅ Stored ${storedCount} matches from API`);
     } catch (error) {
-      console.error('[FootballData] fetchAndStoreMatches failed:', error.message);
-    }
-  }
-
-  /**
-   * Basic goal event storage (placeholder — expand with full events later)
-   */
-  async storeBasicGoalEvents(matchId, matchData) {
-    try {
-      const homeGoals = matchData.score.fullTime.home ?? 0;
-      const awayGoals = matchData.score.fullTime.away ?? 0;
-
-      if (homeGoals > 0 || awayGoals > 0) {
-        console.log(`Match ${matchId}: ${homeGoals} home goals, ${awayGoals} away goals`);
-        // Later: call apiFootballData.getMatchDetails(matchId) and parse real events
-      }
-    } catch (err) {
-      console.error(`Failed to store events for match ${matchId}:`, err.message);
-    }
-  }
-
-  /**
-   * Get events for all matches (from DB)
-   */
-  async getMatchEvents(matches) {
-    try {
-      const matchIds = matches.map(m => m.id);
-      
-      if (matchIds.length === 0) return [];
-
-      const [events] = await pool.query(`
-        SELECT * FROM match_events 
-        WHERE match_id IN (?)
-        ORDER BY match_id, time_elapsed
-      `, [matchIds]);
-
-      const matchesWithEvents = matches.map(match => ({
-        ...match,
-        events: events.filter(e => e.match_id === match.id)
-      }));
-
-      return matchesWithEvents;
-    } catch (error) {
-      console.error('Error getting match events:', error.message);
+      console.error('Error fetching from API:', error);
       throw error;
     }
   }
 
   /**
-   * Run complete analysis on matches
+   * Guarantee a team stub exists in the `teams` table.
+   * Uses data already available in the match payload (no extra API call).
+   * Falls back to a live API call only if the embedded data is insufficient.
    */
-  runAnalysis(teamId, matches) {
-    const analysis = {
-      team_id: teamId,
-      matches_analyzed: matches.length,
-      goal_timing: this.analyzeGoalTiming(teamId, matches),
-      first_to_score: this.analyzeFirstToScore(teamId, matches),
-      btts: this.analyzeBTTS(matches),
-      over_under: this.analyzeOverUnder(matches),
-      home_away: this.analyzeHomeAway(teamId, matches),
+  async ensureTeamExists(teamStub) {
+    if (!teamStub?.id) return;
+
+    const [rows] = await pool.query('SELECT id FROM teams WHERE id = ?', [teamStub.id]);
+    if (rows.length > 0) return; // already there
+
+    console.log(`⚠️  Team ${teamStub.name ?? teamStub.id} not in DB — inserting stub...`);
+
+    // Try to upsert from the stub data embedded in the match response
+    if (teamStub.name) {
+      const team = footballData.convertTeamToOurFormat(teamStub);
+      await pool.query(`
+        INSERT INTO teams (id, name, code, country, logo)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [team.id, team.name, team.code, team.country, team.logo]);
+      return;
+    }
+
+    // Last resort: fetch full team details from API
+    try {
+      const apiTeam = await footballData.getTeam(teamStub.id);
+      const team    = footballData.convertTeamToOurFormat(apiTeam);
+      await pool.query(`
+        INSERT INTO teams (id, name, code, country, logo)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [team.id, team.name, team.code, team.country, team.logo]);
+    } catch (err) {
+      console.error(`Failed to fetch team ${teamStub.id}:`, err.message);
+    }
+  }
+
+  // ─── Events ──────────────────────────────────────────────────────────────────
+
+  async fetchAndStoreEvents(matchId, matchData = null) {
+    try {
+      if (!matchData) {
+        const fullMatch = await footballData.getMatch(matchId);
+        matchData = fullMatch.match || fullMatch;
+      }
+
+      const events = footballData.extractGoalEvents(matchData);
+
+      for (const event of events) {
+        await pool.query(`
+          INSERT INTO match_events
+            (match_id, team_id, player_name, event_type, event_detail,
+             time_elapsed, time_extra, comments)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE time_elapsed = VALUES(time_elapsed)
+        `, [
+          event.match_id,
+          event.team_id,
+          event.player_name,
+          event.event_type,
+          event.event_detail,
+          event.time_elapsed,
+          event.time_extra || 0,
+          event.comments   || ''
+        ]);
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      // Non-critical — log and continue
+    }
+  }
+
+  async getMatchEvents(matches) {
+    try {
+      const matchIds = matches.map(m => m.id);
+      if (matchIds.length === 0) return [];
+
+      const [events] = await pool.query(`
+        SELECT * FROM match_events
+        WHERE  match_id IN (?)
+        ORDER  BY match_id, time_elapsed
+      `, [matchIds]);
+
+      return matches.map(match => ({
+        ...match,
+        events: events.filter(e => e.match_id === match.id)
+      }));
+    } catch (error) {
+      console.error('Error getting match events:', error);
+      throw error;
+    }
+  }
+
+  // ─── Analysis ────────────────────────────────────────────────────────────────
+
+  async runAnalysis(teamId, matches) {
+    return {
+      team_id:           teamId,
+      matches_analyzed:  matches.length,
+      goal_timing:       this.analyzeGoalTiming(teamId, matches),
+      first_to_score:    this.analyzeFirstToScore(teamId, matches),
+      btts:              this.analyzeBTTS(matches),
+      over_under:        this.analyzeOverUnder(matches),
+      home_away:         this.analyzeHomeAway(teamId, matches),
       halftime_fulltime: this.analyzeHalftimeFulltime(teamId, matches)
     };
-
-    return analysis;
   }
 
   analyzeGoalTiming(teamId, matches) {
     const intervals = {
-      '0-15': { scored: 0, conceded: 0 },
+      '0-15':  { scored: 0, conceded: 0 },
       '15-30': { scored: 0, conceded: 0 },
       '30-45': { scored: 0, conceded: 0 },
       '45-60': { scored: 0, conceded: 0 },
@@ -297,9 +367,7 @@ class AnalysisService {
     matches.forEach(match => {
       match.events.forEach(event => {
         if (event.event_type === 'Goal') {
-          const minute = event.time_elapsed;
-          const interval = this.getTimeInterval(minute);
-          
+          const interval = this.getTimeInterval(event.time_elapsed);
           if (event.team_id === teamId) {
             intervals[interval].scored++;
           } else {
@@ -309,18 +377,16 @@ class AnalysisService {
       });
     });
 
-    const totalMatches = matches.length;
+    const totalMatches = matches.length || 1;
     const result = {};
-    
     Object.keys(intervals).forEach(interval => {
       result[interval] = {
-        scored: intervals[interval].scored,
-        conceded: intervals[interval].conceded,
-        scored_percentage: Math.round((intervals[interval].scored / totalMatches) * 100 || 0),
-        conceded_percentage: Math.round((intervals[interval].conceded / totalMatches) * 100 || 0)
+        scored:              intervals[interval].scored,
+        conceded:            intervals[interval].conceded,
+        scored_percentage:   Math.round((intervals[interval].scored   / totalMatches) * 100),
+        conceded_percentage: Math.round((intervals[interval].conceded / totalMatches) * 100)
       };
     });
-
     return result;
   }
 
@@ -335,76 +401,57 @@ class AnalysisService {
 
   analyzeFirstToScore(teamId, matches) {
     let firstToScoreCount = 0;
+    let validMatches      = 0;
 
     matches.forEach(match => {
       const goals = match.events
         .filter(e => e.event_type === 'Goal')
         .sort((a, b) => a.time_elapsed - b.time_elapsed);
 
-      if (goals.length > 0 && goals[0].team_id === teamId) {
-        firstToScoreCount++;
+      if (goals.length > 0) {
+        validMatches++;
+        if (goals[0].team_id === teamId) firstToScoreCount++;
       }
     });
 
     return {
-      count: firstToScoreCount,
-      total: matches.length,
-      percentage: Math.round((firstToScoreCount / matches.length) * 100 || 0)
+      count:      firstToScoreCount,
+      total:      validMatches,
+      percentage: validMatches > 0 ? Math.round((firstToScoreCount / validMatches) * 100) : 0
     };
   }
 
   analyzeBTTS(matches) {
     let bttsCount = 0;
-
     matches.forEach(match => {
-      const homeGoals = match.events.filter(e => 
-        e.event_type === 'Goal' && e.team_id === match.home_team_id
-      ).length;
-      
-      const awayGoals = match.events.filter(e => 
-        e.event_type === 'Goal' && e.team_id === match.away_team_id
-      ).length;
-
-      if (homeGoals > 0 && awayGoals > 0) {
-        bttsCount++;
-      }
+      if ((match.home_score || 0) > 0 && (match.away_score || 0) > 0) bttsCount++;
     });
-
     return {
-      count: bttsCount,
-      total: matches.length,
-      percentage: Math.round((bttsCount / matches.length) * 100 || 0)
+      count:      bttsCount,
+      total:      matches.length,
+      percentage: matches.length > 0 ? Math.round((bttsCount / matches.length) * 100) : 0
     };
   }
 
   analyzeOverUnder(matches) {
-    const thresholds = {
-      '0.5': 0,
-      '1.5': 0,
-      '2.5': 0,
-      '3.5': 0,
-      '4.5': 0
-    };
+    const thresholds = { '0.5': 0, '1.5': 0, '2.5': 0, '3.5': 0, '4.5': 0 };
 
     matches.forEach(match => {
       const totalGoals = (match.home_score || 0) + (match.away_score || 0);
-      
-      Object.keys(thresholds).forEach(threshold => {
-        if (totalGoals > parseFloat(threshold)) {
-          thresholds[threshold]++;
-        }
+      Object.keys(thresholds).forEach(t => {
+        if (totalGoals > parseFloat(t)) thresholds[t]++;
       });
     });
 
-    const result = {};
-    Object.keys(thresholds).forEach(threshold => {
-      result[`over_${threshold}`] = {
-        count: thresholds[threshold],
-        total: matches.length,
-        percentage: Math.round((thresholds[threshold] / matches.length) * 100 || 0)
+    const result       = {};
+    const totalMatches = matches.length || 1;
+    Object.keys(thresholds).forEach(t => {
+      result[`over_${t}`] = {
+        count:      thresholds[t],
+        total:      matches.length,
+        percentage: Math.round((thresholds[t] / totalMatches) * 100)
       };
     });
-
     return result;
   }
 
@@ -415,21 +462,18 @@ class AnalysisService {
     };
 
     matches.forEach(match => {
-      const isHome = match.home_team_id === teamId;
+      const isHome    = match.home_team_id === teamId;
       const homeScore = match.home_score || 0;
       const awayScore = match.away_score || 0;
+      const bucket    = isHome ? stats.home : stats.away;
 
-      if (isHome) {
-        stats.home.total++;
-        if (homeScore > awayScore) stats.home.wins++;
-        else if (homeScore === awayScore) stats.home.draws++;
-        else stats.home.losses++;
-      } else {
-        stats.away.total++;
-        if (awayScore > homeScore) stats.away.wins++;
-        else if (homeScore === awayScore) stats.away.draws++;
-        else stats.away.losses++;
-      }
+      bucket.total++;
+      const teamScore = isHome ? homeScore : awayScore;
+      const oppScore  = isHome ? awayScore : homeScore;
+
+      if (teamScore > oppScore)      bucket.wins++;
+      else if (teamScore === oppScore) bucket.draws++;
+      else                             bucket.losses++;
     });
 
     return stats;
@@ -443,24 +487,11 @@ class AnalysisService {
     };
 
     matches.forEach(match => {
-      const isHome = match.home_team_id === teamId;
-      
-      const htResult = this.getMatchResult(
-        match.halftime_home_score, 
-        match.halftime_away_score, 
-        isHome
-      );
-      
-      const ftResult = this.getMatchResult(
-        match.home_score, 
-        match.away_score, 
-        isHome
-      );
-
-      const pattern = `${htResult}/${ftResult}`;
-      if (patterns[pattern] !== undefined) {
-        patterns[pattern]++;
-      }
+      const isHome    = match.home_team_id === teamId;
+      const htResult  = this.getMatchResult(match.halftime_home_score, match.halftime_away_score, isHome);
+      const ftResult  = this.getMatchResult(match.home_score,          match.away_score,          isHome);
+      const pattern   = `${htResult}/${ftResult}`;
+      if (patterns[pattern] !== undefined) patterns[pattern]++;
     });
 
     return patterns;
@@ -468,36 +499,11 @@ class AnalysisService {
 
   getMatchResult(homeScore, awayScore, isHome) {
     if (homeScore === null || awayScore === null) return 'D';
-    
-    if (isHome) {
-      if (homeScore > awayScore) return 'W';
-      if (homeScore === awayScore) return 'D';
-      return 'L';
-    } else {
-      if (awayScore > homeScore) return 'W';
-      if (homeScore === awayScore) return 'D';
-      return 'L';
-    }
-  }
-
-  async cacheResults(teamId, numMatches, homeAway, analysis) {
-    try {
-      await pool.query(`
-        INSERT INTO analysis_cache 
-        (team_id, analysis_type, time_period, home_away, data, matches_analyzed, expires_at)
-        VALUES (?, 'team_analysis', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))
-      `, [
-        teamId,
-        `last_${numMatches}`,
-        homeAway,
-        JSON.stringify(analysis),
-        numMatches
-      ]);
-
-      console.log('✅ Analysis cached for 24 hours');
-    } catch (error) {
-      console.error('Error caching results:', error.message);
-    }
+    const teamScore = isHome ? homeScore : awayScore;
+    const oppScore  = isHome ? awayScore : homeScore;
+    if (teamScore > oppScore)       return 'W';
+    if (teamScore === oppScore)     return 'D';
+    return 'L';
   }
 }
 

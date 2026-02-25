@@ -14,9 +14,10 @@ const indexRoutes = require('./routes/index');
 const matchRoutes = require('./routes/matches');
 const analysisRoutes = require('./routes/analysis');
 const teamRoutes = require('./routes/team');
+const scheduler = require('./services/scheduler');
 
 // Security middleware
-app.use(helmet());
+// app.use(helmet());
 app.use(cors());
 
 // Body parser middleware
@@ -70,6 +71,7 @@ async function startServer() {
   try {
     await testConnection();
     app.listen(PORT, () => {
+      scheduler.start();
       console.log(`🚀 Football Analytics Tool running on http://localhost:${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
@@ -80,6 +82,17 @@ async function startServer() {
     process.exit(1);
   }
 }
+
+// Graceful shutdown — stop cron before process exits
+process.on('SIGTERM', () => {
+  scheduler.stop();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  scheduler.stop();
+  process.exit(0);
+});
 
 startServer();
 
