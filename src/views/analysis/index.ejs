@@ -4,119 +4,226 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/css/main.css">
     <link rel="stylesheet" href="/css/analysis.css">
 </head>
 <body>
     <%- include('../partials/header') %>
-    
-    <main class="container">
-        <section class="analysis-hero">
-            <h1>⚽ Football Match Analysis</h1>
-            <p>Analyze team performance, goal timing, and betting patterns</p>
+
+    <main class="app-main">
+        <section class="page-intro">
+            <span class="page-kicker">
+                <i class="bi bi-graph-up-arrow"></i>
+                Analysis
+            </span>
+            <h1 class="page-title">Football Analysis Lab</h1>
+            <p class="page-subtitle">
+                Compare recent team form, scoring patterns, and head-to-head stats.
+            </p>
         </section>
 
-        <!-- Analysis Type Selector -->
-        <div class="analysis-tabs">
-            <button class="tab-btn active" data-tab="single">Single Team Analysis</button>
-            <button class="tab-btn" data-tab="h2h">Head-to-Head</button>
-        </div>
-
-        <!-- Single Team Analysis Form -->
-        <div id="single-analysis" class="tab-content active">
-            <div class="analysis-form-card">
-                <h2>Analyze Team Performance</h2>
-                <form id="singleTeamForm">
-                    <div class="form-group">
-                        <label for="team">Select Team:</label>
-                        <select id="team" name="team" required>
-                            <option value="">-- Choose a team --</option>
-                            <% if (teams && teams.length > 0) { %>
-                                <% teams.forEach(team => { %>
-                                    <option value="<%= team.id %>"><%= team.name %></option>
-                                <% }); %>
-                            <% } else { %>
-                                <option value="">No teams available (run seed script)</option>
-                            <% } %>
+        <% if (teams && teams.length > 0) { %>
+            <section class="app-card app-card-muted">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">Scope</h2>
+                        <p class="section-subtitle">Choose a league to narrow team suggestions and standings.</p>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="analysisLeague" class="form-label">League</label>
+                        <select id="analysisLeague" class="form-select">
+                            <option value="">All leagues</option>
+                            <% (leagues || []).forEach(league => { %>
+                                <option value="<%= league.id %>">
+                                    <%= league.name %><%= league.country ? ` (${league.country})` : '' %>
+                                </option>
+                            <% }); %>
                         </select>
                     </div>
-
-                    <div class="form-group">
-                        <label for="matches">Number of Matches:</label>
-                        <select id="matches" name="matches">
-                            <option value="5">Last 5 matches</option>
-                            <option value="10" selected>Last 10 matches</option>
-                            <option value="15">Last 15 matches</option>
-                            <option value="20">Last 20 matches</option>
-                        </select>
+                    <div class="col-12 col-md-6 d-flex align-items-end">
+                        <button id="loadStandingsBtn" type="button" class="btn-app btn-app-secondary w-100">
+                            <i class="bi bi-table"></i>
+                            Load Standings
+                        </button>
                     </div>
+                </div>
+            </section>
 
-                    <div class="form-group">
-                        <label for="homeAway">Match Type:</label>
-                        <select id="homeAway" name="homeAway">
-                            <option value="both">Home & Away</option>
-                            <option value="home">Home Only</option>
-                            <option value="away">Away Only</option>
-                        </select>
+            <section class="app-card app-card-muted">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">Results</h2>
+                        <p class="section-subtitle">Your latest analysis appears here first.</p>
                     </div>
+                </div>
+                <div id="results-container"></div>
+                <div id="results-placeholder" class="empty-state">
+                    <h3>No analysis yet</h3>
+                    <p>Run a single-team or head-to-head analysis below.</p>
+                </div>
+            </section>
 
-                    <button type="submit" class="btn btn-primary">
-                        <span class="btn-text">Analyze Team</span>
-                        <span class="btn-loader" style="display: none;">⏳ Analyzing...</span>
-                    </button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Head-to-Head Analysis Form -->
-        <div id="h2h-analysis" class="tab-content">
-            <div class="analysis-form-card">
-                <h2>Head-to-Head Analysis</h2>
-                <form id="h2hForm">
-                    <div class="form-group">
-                        <label for="team1">Team 1:</label>
-                        <select id="team1" name="team1" required>
-                            <option value="">-- Choose team 1 --</option>
-                            <% if (teams && teams.length > 0) { %>
-                                <% teams.forEach(team => { %>
-                                    <option value="<%= team.id %>"><%= team.name %></option>
-                                <% }); %>
-                            <% } %>
-                        </select>
+            <section class="app-card app-card-muted">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">League Standings</h2>
+                        <p class="section-subtitle">Loaded from the standings API endpoint.</p>
                     </div>
+                </div>
+                <div id="standings-container"></div>
+                <div id="standings-placeholder" class="empty-state">
+                    <h3>No standings loaded</h3>
+                    <p>Select a league and click "Load Standings".</p>
+                </div>
+            </section>
 
-                    <div class="form-group">
-                        <label for="team2">Team 2:</label>
-                        <select id="team2" name="team2" required>
-                            <option value="">-- Choose team 2 --</option>
-                            <% if (teams && teams.length > 0) { %>
-                                <% teams.forEach(team => { %>
-                                    <option value="<%= team.id %>"><%= team.name %></option>
-                                <% }); %>
-                            <% } %>
-                        </select>
+            <section class="app-card analysis-layout">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">Run Analysis</h2>
+                        <p class="section-subtitle">Search and select teams before submitting.</p>
                     </div>
+                </div>
 
-                    <div class="form-group">
-                        <label for="h2hMatches">Number of Matches:</label>
-                        <select id="h2hMatches" name="matches">
-                            <option value="5">Last 5 matches each</option>
-                            <option value="10" selected>Last 10 matches each</option>
-                        </select>
-                    </div>
+                <datalist id="analysis-team-options">
+                    <% teams.forEach(team => { %>
+                        <option value="<%= team.name %>" data-id="<%= team.id %>"></option>
+                    <% }); %>
+                </datalist>
 
-                    <button type="submit" class="btn btn-primary">
-                        <span class="btn-text">Compare Teams</span>
-                        <span class="btn-loader" style="display: none;">⏳ Analyzing...</span>
-                    </button>
-                </form>
-            </div>
-        </div>
+                <div class="analysis-tabs">
+                    <button type="button" class="analysis-tab-btn active" data-tab="single">Single Team</button>
+                    <button type="button" class="analysis-tab-btn" data-tab="h2h">Head-to-Head</button>
+                </div>
 
-        <!-- Results Container -->
-        <div id="results-container" style="display: none;">
-            <!-- Results will be dynamically inserted here -->
-        </div>
+                <div id="single-analysis" class="analysis-panel active">
+                    <form id="singleTeamForm">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label for="teamSearch" class="form-label">Select Team</label>
+                                <input
+                                    id="teamSearch"
+                                    type="text"
+                                    list="analysis-team-options"
+                                    class="form-control team-search-input"
+                                    data-hidden-target="team"
+                                    placeholder="Search and pick a team"
+                                    autocomplete="off"
+                                    required
+                                >
+                                <input id="team" name="team" type="hidden">
+                                <p class="picker-help">Type at least 2 letters to find a team.</p>
+                            </div>
+
+                            <div class="col-sm-6">
+                                <label for="matches" class="form-label">Matches</label>
+                                <select id="matches" name="matches" class="form-select">
+                                    <option value="5">Last 5</option>
+                                    <option value="10" selected>Last 10</option>
+                                    <option value="15">Last 15</option>
+                                    <option value="20">Last 20</option>
+                                </select>
+                            </div>
+
+                            <div class="col-sm-6">
+                                <label for="homeAway" class="form-label">Match Type</label>
+                                <select id="homeAway" name="homeAway" class="form-select">
+                                    <option value="both">Home & Away</option>
+                                    <option value="home">Home only</option>
+                                    <option value="away">Away only</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12">
+                                <button type="submit" class="btn-app">
+                                    <span class="btn-text">
+                                        <i class="bi bi-activity"></i>
+                                        Analyze Team
+                                    </span>
+                                    <span class="btn-loader hidden">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        Analyzing...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="h2h-analysis" class="analysis-panel">
+                    <form id="h2hForm">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label for="team1Search" class="form-label">Team 1</label>
+                                <input
+                                    id="team1Search"
+                                    type="text"
+                                    list="analysis-team-options"
+                                    class="form-control team-search-input"
+                                    data-hidden-target="team1"
+                                    placeholder="Search first team"
+                                    autocomplete="off"
+                                    required
+                                >
+                                <input id="team1" name="team1" type="hidden">
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <label for="team2Search" class="form-label">Team 2</label>
+                                <input
+                                    id="team2Search"
+                                    type="text"
+                                    list="analysis-team-options"
+                                    class="form-control team-search-input"
+                                    data-hidden-target="team2"
+                                    placeholder="Search second team"
+                                    autocomplete="off"
+                                    required
+                                >
+                                <input id="team2" name="team2" type="hidden">
+                            </div>
+
+                            <div class="col-sm-6">
+                                <label for="h2hMatches" class="form-label">Matches per Team</label>
+                                <select id="h2hMatches" name="matches" class="form-select">
+                                    <option value="5">Last 5</option>
+                                    <option value="10" selected>Last 10</option>
+                                    <option value="15">Last 15</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12">
+                                <button type="submit" class="btn-app">
+                                    <span class="btn-text">
+                                        <i class="bi bi-intersect"></i>
+                                        Compare Teams
+                                    </span>
+                                    <span class="btn-loader hidden">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        Analyzing...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        <% } else { %>
+            <section class="app-card">
+                <div class="empty-state">
+                    <h3>No teams available</h3>
+                    <p>Seed your teams database first, then return to run analysis.</p>
+                    <code>npm run db:seed</code>
+                </div>
+            </section>
+        <% } %>
     </main>
 
     <%- include('../partials/footer') %>

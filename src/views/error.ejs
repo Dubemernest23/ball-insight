@@ -3,66 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Error - Ball-insight</title>
+    <title>Error - Ball Insight</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
     <%- include('partials/header') %>
-    
-    <main class="container">
-        <div class="error-page">
-            <h1>⚠️</h1>
-            <h2>Oops! Something went wrong</h2>
-            <p>We encountered an error processing your request.</p>
-            
-            <% if (typeof error !== 'undefined' && error.message) { %>
-                <div class="error-details">
-                    <pre><%= error.message %></pre>
-                    <% if (error.stack && error.stack.error) { %>
-                        <pre><%= error.stack %></pre>
+
+    <main class="app-main">
+        <section class="app-card">
+            <div class="error-shell">
+                <p class="error-code">Oops</p>
+                <h1 class="error-title">Something went wrong</h1>
+                <p class="error-copy">We hit an unexpected issue while processing this request.</p>
+
+                <% if (typeof error !== 'undefined' && error.message) { %>
+                    <div class="alert alert-danger text-start mt-3 mb-0" role="alert">
+                        <strong>Error:</strong> <%= error.message %>
+                    </div>
+                    <% if (error.stack) { %>
+                        <pre class="mt-3 mb-0 p-3 border rounded bg-light text-danger text-start small"><%= error.stack %></pre>
                     <% } %>
+                <% } %>
+
+                <div class="button-row justify-content-center mt-3">
+                    <a href="/" class="btn-app">
+                        <i class="bi bi-house"></i>
+                        Go Home
+                    </a>
                 </div>
-            <% } %>
-            
-            <a href="/" class="btn btn-primary">Go Home</a>
-        </div>
+            </div>
+        </section>
     </main>
 
     <%- include('partials/footer') %>
-    
-    <style>
-        .error-page {
-            text-align: center;
-            padding: 5rem 2rem;
-        }
-        .error-page h1 {
-            font-size: 5rem;
-            margin: 0;
-        }
-        .error-page h2 {
-            font-size: 2rem;
-            margin: 1rem 0;
-        }
-        .error-page p {
-            font-size: 1.2rem;
-            margin: 1rem 0 2rem;
-            color: #666;
-        }
-        .error-details {
-            background: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 1rem;
-            margin: 2rem auto;
-            max-width: 800px;
-            text-align: left;
-        }
-        .error-details pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-size: 0.9rem;
-            color: #e74c3c;
-        }
-    </style>
 </body>
 </html>

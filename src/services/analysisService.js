@@ -59,7 +59,35 @@ class AnalysisService {
         LIMIT 1
       `, [teamId, numMatches, homeAway]);
 
-      return rows.length > 0 ? JSON.parse(rows[0].data) : null;
+      if (rows.length === 0) return null;
+
+      const cachedData = rows[0].data;
+      if (cachedData === null || cachedData === undefined) return null;
+
+      if (typeof cachedData === 'string') {
+        try {
+          return JSON.parse(cachedData);
+        } catch {
+          console.warn(`⚠️ Invalid cached JSON for team ${teamId}; ignoring cache entry.`);
+          return null;
+        }
+      }
+
+      if (Buffer.isBuffer(cachedData)) {
+        try {
+          return JSON.parse(cachedData.toString('utf8'));
+        } catch {
+          console.warn(`⚠️ Invalid cached JSON buffer for team ${teamId}; ignoring cache entry.`);
+          return null;
+        }
+      }
+
+      if (typeof cachedData === 'object') {
+        return cachedData;
+      }
+
+      console.warn(`⚠️ Unexpected cache payload type: ${typeof cachedData}`);
+      return null;
     } catch (error) {
       console.error('Error checking cache:', error);
       return null;
@@ -190,6 +218,7 @@ class AnalysisService {
           // No teamIdMap needed here because ensureTeamExists guarantees
           // the raw API ids are present as DB primary keys.
           const match     = footballData.convertMatchToOurFormat(rawMatch);
+          await this.ensureLeagueExists(rawMatch.competition, match.season);
           const matchDate = new Date(match.match_date)
             .toISOString()
             .slice(0, 19)
@@ -284,6 +313,37 @@ class AnalysisService {
   }
 
   // ─── Events ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Guarantee a competition row exists before inserting matches.
+   * Prevents FK failures on matches.league_id -> leagues.id.
+   */
+  async ensureLeagueExists(competitionStub, season = 2024) {
+    const leagueId = competitionStub?.id ?? footballData.getCompetitionId(competitionStub?.code);
+    if (!leagueId) return;
+
+    const [rows] = await pool.query('SELECT id FROM leagues WHERE id = ?', [leagueId]);
+    if (rows.length > 0) return;
+
+    const leagueName = competitionStub?.name || competitionStub?.code || `League ${leagueId}`;
+    console.log(`⚠️  League ${leagueName} not in DB - inserting stub...`);
+
+    await pool.query(`
+      INSERT INTO leagues (id, name, country, season, logo)
+      VALUES (?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        name = VALUES(name),
+        country = VALUES(country),
+        season = VALUES(season),
+        logo = VALUES(logo)
+    `, [
+      leagueId,
+      leagueName,
+      competitionStub?.area?.name || 'Unknown',
+      Number.isFinite(Number(season)) ? Number(season) : 2024,
+      competitionStub?.emblem || ''
+    ]);
+  }
 
   async fetchAndStoreEvents(matchId, matchData = null) {
     try {

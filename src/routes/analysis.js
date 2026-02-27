@@ -17,4 +17,7 @@ router.get('/goal-timing/:teamId', analysisController.goalTimingAnalysis);
 // Over/Under analysis
 router.get('/over-under/:teamId', analysisController.overUnderAnalysis);
 
+// League standings
+router.get('/standings/:leagueId', analysisController.getStandings);
+
 module.exports = router;

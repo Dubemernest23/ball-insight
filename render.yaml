@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ballinsight
+    runtime: node
+    plan: free
+    buildCommand: npm install && node render-build.js
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_SSL_CERT
+        sync: false
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        sync: false

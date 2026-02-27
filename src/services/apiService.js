@@ -110,7 +110,8 @@ class FootballDataService {
    *      from a previous seed run.
    */
   convertMatchToOurFormat(match, teamIdMap = null) {
-    const competitionId = this.getCompetitionId(match.competition?.code || 'PL');
+    const mappedCompetitionId = this.getCompetitionId(match.competition?.code);
+    const competitionId = match.competition?.id ?? mappedCompetitionId ?? null;
 
     let season = 2024;
     if (match.season?.startDate) {
@@ -245,7 +246,7 @@ class FootballDataService {
       'DED': 2003,
       'PPL': 2017
     };
-    return map[competitionCode] || 0;
+    return map[competitionCode] || null;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────

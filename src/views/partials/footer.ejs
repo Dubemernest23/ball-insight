@@ -1,10 +1,28 @@
 <footer>
-    <div class="footer-content">
-        <p>&copy; 2026 Ball-insight. Built for smarter betting decisions.</p>
-        <p class="disclaimer">⚠️ Gamble responsibly. This tool is for informational purposes only.</p>
-        <div class="footer-links">
-            <a href="/about">About</a>
-            <a href="https://www.api-football.com" target="_blank">Powered by API-Football</a>
-        </div>
-    </div>
+    <p class="footer-note">
+        Built for smarter betting decisions. Always gamble responsibly.
+    </p>
+
+    <nav class="bottom-nav" aria-label="Primary navigation">
+        <a href="/" class="bottom-nav-link <%= page === 'home' ? 'active' : '' %>">
+            <i class="bi bi-house-door-fill" aria-hidden="true"></i>
+            <span>Home</span>
+        </a>
+        <a href="/analysis" class="bottom-nav-link <%= page === 'analysis' ? 'active' : '' %>">
+            <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
+            <span>Analysis</span>
+        </a>
+        <a href="/matches" class="bottom-nav-link <%= page === 'matches' ? 'active' : '' %>">
+            <i class="bi bi-trophy-fill" aria-hidden="true"></i>
+            <span>Matches</span>
+        </a>
+        <a href="/teams" class="bottom-nav-link <%= page === 'teams' ? 'active' : '' %>">
+            <i class="bi bi-people-fill" aria-hidden="true"></i>
+            <span>Teams</span>
+        </a>
+        <a href="/about" class="bottom-nav-link <%= page === 'about' ? 'active' : '' %>">
+            <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+            <span>About</span>
+        </a>
+    </nav>
 </footer>

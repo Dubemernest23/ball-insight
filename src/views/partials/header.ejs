@@ -1,14 +1,18 @@
-<header>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <a href="/">⚽ Ball-Insight</a>
-        </div>
-        <ul class="nav-menu">
-            <li><a href="/" class="<%= page === 'home' ? 'active' : '' %>">Home</a></li>
-            <li><a href="/analysis" class="<%= page === 'analysis' ? 'active' : '' %>">Analysis</a></li>
-            <li><a href="/matches" class="<%= page === 'matches' ? 'active' : '' %>">Matches</a></li>
-            <li><a href="/teams" class="<%= page === 'teams' ? 'active' : '' %>">Teams</a></li>
-            <li><a href="/about" class="<%= page === 'about' ? 'active' : '' %>">About</a></li>
-        </ul>
-    </nav>
+<header class="app-topbar">
+    <div class="app-topbar-inner">
+        <a href="/" class="brand-pill" aria-label="Ball Insight home">
+            <span class="brand-icon">
+                <i class="bi bi-dribbble" aria-hidden="true"></i>
+            </span>
+            <span class="brand-label">
+                <span class="brand-title">Ball Insight</span>
+                <span class="brand-subtitle">Match Intelligence</span>
+            </span>
+        </a>
+
+        <a href="/analysis" class="quick-link <%= page === 'analysis' ? 'active' : '' %>">
+            <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>
+            <span>Quick Analyze</span>
+        </a>
+    </div>
 </header>

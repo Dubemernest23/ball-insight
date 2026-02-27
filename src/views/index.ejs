@@ -4,52 +4,110 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
     <%- include('partials/header') %>
-    
-    <main class="container">
-        <section class="hero">
-            <h1>Ball-insight</h1>
-            <p class="tagline">Data-driven insights for smarter betting decisions</p>
+
+    <main class="app-main">
+        <section class="page-intro">
+            <span class="page-kicker">
+                <i class="bi bi-stars"></i>
+                Mobile Match Lab
+            </span>
+            <h1 class="page-title">Football Analysis Built for Fast Decisions</h1>
+            <p class="page-subtitle">
+                Pull trend-backed signals from recent matches, compare teams quickly, and focus on useful betting patterns.
+            </p>
         </section>
 
-        <section class="features">
-            <div class="feature-card">
-                <h3>⏱️ Goal Timing Analysis</h3>
-                <p>Track when teams score across different match intervals</p>
+        <section class="app-card app-card-muted">
+            <div class="section-header">
+                <div>
+                    <h2 class="section-title">Today at a Glance</h2>
+                    <p class="section-subtitle">Core indicators you can monitor before placing a bet.</p>
+                </div>
             </div>
-
-            <div class="feature-card">
-                <h3>🎯 First to Score</h3>
-                <p>Historical data on which team typically scores first</p>
-            </div>
-
-            <div class="feature-card">
-                <h3>⚽ Both Teams Score</h3>
-                <p>Analyze BTTS frequency for better predictions</p>
-            </div>
-
-            <div class="feature-card">
-                <h3>📊 Over/Under Patterns</h3>
-                <p>Identify trends in total goals scored</p>
-            </div>
-
-            <div class="feature-card">
-                <h3>🏟️ Home/Away Stats</h3>
-                <p>Compare performance based on venue</p>
-            </div>
-
-            <div class="feature-card">
-                <h3>🤝 Head-to-Head</h3>
-                <p>Historical matchup data between teams</p>
+            <div class="stat-strip">
+                <div class="stat-chip">
+                    <p class="stat-label">Goal Timing</p>
+                    <p class="stat-value">15m Slices</p>
+                </div>
+                <div class="stat-chip">
+                    <p class="stat-label">H2H Insights</p>
+                    <p class="stat-value">Side-by-Side</p>
+                </div>
+                <div class="stat-chip">
+                    <p class="stat-label">Over/Under</p>
+                    <p class="stat-value">0.5 to 4.5</p>
+                </div>
             </div>
         </section>
 
-        <section class="cta">
-            <a href="/analysis" class="btn btn-primary">Start Analyzing</a>
-            <a href="/teams" class="btn btn-secondary">Browse Teams</a>
+        <section class="app-card">
+            <div class="section-header">
+                <div>
+                    <h2 class="section-title">What You Can Analyze</h2>
+                    <p class="section-subtitle">All modules work with your current match dataset.</p>
+                </div>
+            </div>
+
+            <div class="cards-grid">
+                <article class="feature-card">
+                    <span class="feature-icon"><i class="bi bi-stopwatch"></i></span>
+                    <h3 class="feature-title">Goal Timing Windows</h3>
+                    <p class="feature-copy">See which intervals produce goals scored or conceded most often.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon"><i class="bi bi-lightning-charge"></i></span>
+                    <h3 class="feature-title">First Team to Score</h3>
+                    <p class="feature-copy">Track how often a team opens the scoring in completed fixtures.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon"><i class="bi bi-arrow-left-right"></i></span>
+                    <h3 class="feature-title">Both Teams to Score</h3>
+                    <p class="feature-copy">Evaluate BTTS trends as a quick confidence check.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon"><i class="bi bi-bar-chart-line"></i></span>
+                    <h3 class="feature-title">Over/Under Patterns</h3>
+                    <p class="feature-copy">Measure how frequently matches clear each total-goals line.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon"><i class="bi bi-house-door"></i></span>
+                    <h3 class="feature-title">Home vs Away Split</h3>
+                    <p class="feature-copy">Break down results by venue to detect location bias.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon"><i class="bi bi-diagram-3"></i></span>
+                    <h3 class="feature-title">Head-to-Head Compare</h3>
+                    <p class="feature-copy">Run both teams through the same model before kickoff.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="app-card">
+            <div class="section-header">
+                <div>
+                    <h2 class="section-title">Start Now</h2>
+                    <p class="section-subtitle">Jump directly into analysis or browse the team database first.</p>
+                </div>
+            </div>
+            <div class="button-row">
+                <a href="/analysis" class="btn-app">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    Analyze Matches
+                </a>
+                <a href="/teams" class="btn-app btn-app-secondary">
+                    <i class="bi bi-people"></i>
+                    Browse Teams
+                </a>
+            </div>
         </section>
     </main>
 
