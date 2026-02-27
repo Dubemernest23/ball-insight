@@ -7,7 +7,7 @@ const session    = require('express-session');
 
 const app  = express();
 // Render injects its own PORT — must use it or the health check will fail
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT) || 3000;
 
 // ─── Import Routes ────────────────────────────────────────────────────────────
 const indexRoutes    = require('./routes/index');

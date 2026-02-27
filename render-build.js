@@ -130,7 +130,19 @@ async function runMigrations() {
 }
 
 async function shouldSeed() {
-  // Only seed if the leagues table is empty — prevents re-seeding on every deploy
+  // Force re-seed via env variable - use when tables exist but data is empty
+  if (process.env.FORCE_SEED === 'true') {
+    console.log('FORCE_SEED=true - clearing all data and re-seeding...');
+    await pool.query('SET FOREIGN_KEY_CHECKS = 0');
+    await pool.query('DELETE FROM match_events');
+    await pool.query('DELETE FROM matches');
+    await pool.query('DELETE FROM standings');
+    await pool.query('DELETE FROM teams');
+    await pool.query('DELETE FROM leagues');
+    await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+    return true;
+  }
+  // Normal check - only seed if leagues table is empty
   const [rows] = await pool.query('SELECT COUNT(*) AS count FROM leagues');
   return rows[0].count === 0;
 }
