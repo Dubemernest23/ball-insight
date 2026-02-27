@@ -83,7 +83,15 @@
                     <% teams.forEach(team => { %>
                         <article class="team-card">
                             <% if (team.logo) { %>
-                                <img src="<%= team.logo %>" alt="<%= team.name %> logo" class="team-logo">
+                                <div class="team-logo">
+                                    <img src="<%= team.logo %>" 
+                                        alt="<%= team.name %>"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="logo-fallback" style="display:none;">
+                                        <%= team.name.substring(0, 3).toUpperCase() %>
+                                    </div>
+                                </div>
+                                <!-- <img src="<%= team.logo %>" alt="<%= team.name %> logo" class="team-logo"> -->
                             <% } %>
                             <div class="team-meta">
                                 <h3><%= team.name %></h3>

@@ -28,7 +28,15 @@
             <section class="app-card">
                 <div class="team-header-card">
                     <% if (team.logo) { %>
-                        <img src="<%= team.logo %>" alt="<%= team.name %> logo" class="team-logo-lg">
+                        <div class="team-logo">
+                            <img src="<%= team.logo %>" 
+                                alt="<%= team.name %>"
+                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="logo-fallback" style="display:none;">
+                                <%= team.name.substring(0, 3).toUpperCase() %>
+                            </div>
+                        </div>
+                        <!-- <img src="<%= team.logo %>" alt="<%= team.name %> logo" class="team-logo-lg"> -->
                     <% } %>
                     <div class="team-heading">
                         <h1><%= team.name %></h1>
